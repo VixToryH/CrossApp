@@ -15,6 +15,26 @@
 
 Система призначена для обліку видач примірників книг читачам і повернень.
 
+## Запуск
+
+Збірка проєкту:
+
+```powershell
+dotnet build
+```
+
+Запуск застосунку:
+
+```powershell
+dotnet run --project src/Cli
+```
+
+Запуск у режимі JSON:
+
+```powershell
+dotnet run --project src/Cli -- --json
+```
+
 ## Публікація
 
 Виконано self-contained публікацію застосунку для двох RID:
