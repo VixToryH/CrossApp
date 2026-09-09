@@ -1,7 +1,8 @@
 ﻿using System.Runtime.InteropServices;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
-var info = new
+var info = new 
 {
     OSDescription = RuntimeInformation.OSDescription,
     OSVersion = Environment.OSVersion.ToString(),
@@ -15,7 +16,13 @@ var info = new
 
 if (args.Contains("--json"))
 {
-    Console.WriteLine(JsonSerializer.Serialize(info));
+    var options = new JsonSerializerOptions
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    Console.WriteLine(JsonSerializer.Serialize(info, options));
 }
 else
 {
