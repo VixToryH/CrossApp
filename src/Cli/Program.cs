@@ -1,18 +1,8 @@
-﻿using System.Runtime.InteropServices;
-using System.Text.Encodings.Web;
+﻿using System.Text.Encodings.Web;
 using System.Text.Json;
+using Core;
 
-var info = new 
-{
-    OSDescription = RuntimeInformation.OSDescription,
-    OSVersion = Environment.OSVersion.ToString(),
-    ProcessArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
-    DotNetVersion = Environment.Version.ToString(),
-    Runtime = RuntimeInformation.FrameworkDescription,
-    AppDirectory = AppContext.BaseDirectory,
-    CurrentDirectory = Environment.CurrentDirectory,
-    SubjectArea = "Бібліотека — облік видач примірників книг читачам."
-};
+EnvironmentReport report = EnvironmentInfo.Collect();
 
 if (args.Contains("--json"))
 {
@@ -22,7 +12,7 @@ if (args.Contains("--json"))
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
-    Console.WriteLine(JsonSerializer.Serialize(info, options));
+    Console.WriteLine(JsonSerializer.Serialize(report, options));
 }
 else
 {
@@ -30,14 +20,17 @@ else
     Console.WriteLine("Студент: Гвоздевич Вікторія, група ФЕІ-36");
     Console.WriteLine(new string('-', 52));
 
-    Console.WriteLine($"ОС (OSDescription) : {info.OSDescription}");
-    Console.WriteLine($"ОС (Environment) : {info.OSVersion}");
-    Console.WriteLine($"Архітектура процесу : {info.ProcessArchitecture}");
-    Console.WriteLine($"Версія .NET (CLR) : {info.DotNetVersion}");
-    Console.WriteLine($"Runtime : {info.Runtime}");
-    Console.WriteLine($"Каталог застосунку : {info.AppDirectory}");
-    Console.WriteLine($"Поточний каталог : {info.CurrentDirectory}");
+    Console.WriteLine($"ОС (OSDescription) : {report.OsDescription}");
+    Console.WriteLine($"ОС (Environment) : {report.OsVersion}");
+    Console.WriteLine($"Архітектура процесу : {report.ProcessArchitecture}");
+    Console.WriteLine($"Версія .NET (CLR) : {report.DotNetVersion}");
+    Console.WriteLine($"Runtime             : {report.FrameworkDescription}");
+    Console.WriteLine($"RID (визначено)     : {report.DetectedRid}");
+    Console.WriteLine($"RID (від .NET)      : {report.ReportedRid}");
+    Console.WriteLine($"Каталог застосунку : {report.BaseDirectory}");
+    Console.WriteLine($"Поточний каталог : {report.CurrentDirectory}");
 
     Console.WriteLine(new string('-', 52));
-    Console.WriteLine($"Предметна область: {info.SubjectArea}");
+    Console.WriteLine($"Примітка збірки    : {report.BuildNote}");
+    Console.WriteLine($"Предметна область: {report.SubjectArea}");
 }
