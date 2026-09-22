@@ -1,0 +1,16 @@
+[
+  {
+    "id": "B-101",
+    "isbn": "978-0140449136",
+    "title": "The Odyssey",
+    "year": 1998,
+    "author": "Homer"
+  },
+  {
+    "id": "B-102",
+    "isbn": "978-0141439587",
+    "title": "Jane Eyre",
+    "year": 1847,
+    "author": "Charlotte Bronte"
+  }
+]

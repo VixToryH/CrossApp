@@ -45,7 +45,13 @@ if (!File.Exists(path))
     return 1;
 }
 
-ImportResult<BookDto> result = BookCsvImporter.Load(path);
+string extension = Path.GetExtension(path).ToLowerInvariant();
+ImportResult<BookDto> result = extension switch
+{
+    ".csv" => BookCsvImporter.Load(path),
+    ".json" => BookJsonImporter.Load(path),
+    _ => new ImportResult<BookDto>([], [$"Непідтримуване розширення файлу '{extension}'"])
+};
 
 Console.WriteLine($"Завантажено записів: {result.Items.Count}");
 Console.WriteLine(new string('-', 60));
@@ -65,5 +71,10 @@ if (result.Errors.Count > 0)
         Console.WriteLine($" ! {e}");
     }
 }
+
+int total = result.Items.Count + result.Errors.Count;
+double errorPercent = total > 0 ? (double)result.Errors.Count / total * 100 : 0;
+Console.WriteLine(new string('-', 60));
+Console.WriteLine($"Статистика: Усього: {total} | Прийнято: {result.Items.Count} | Пропущено: {result.Errors.Count} | Помилок: {errorPercent:F1}%");
 
 return 0;
