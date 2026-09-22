@@ -1,0 +1,12 @@
+id;isbn;title;year;author
+B-001;978-0141439518;Pride and Prejudice;1813;Jane Austen
+B-002;978-0451524935;1984;1949;George Orwell
+B-003;978-0061120084;To Kill a Mockingbird;1960;Harper Lee
+B-004;978-0451526342;Animal Farm;1945;George Orwell
+B-005;978-0743273565;The Great Gatsby;1925;F. Scott Fitzgerald
+B-006;978-0316769488;The Catcher in the Rye;1951;J. D. Salinger
+B-007;978-0547928227;The Hobbit;1937;J. R. R. Tolkien
+B-008;978-0140449136;The Odyssey;-800;Homer
+B-009;; The Catcher in the Rye;1951
+B-010;978-0141439518; Pride and Prejudice;не число;Jane Austen
+B-011;978-0141439518; Frankestein;2027;Mary Shelley
