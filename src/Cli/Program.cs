@@ -23,6 +23,7 @@ if (args.Contains("--json"))
 
     Console.WriteLine("CrossApp – практикум з крос-платформного програмування");
     Console.WriteLine("Студент: Гвоздевич Вікторія, група ФЕІ-36");
+    Console.WriteLine();
     Console.WriteLine(new string('-', 52));
 
     Console.WriteLine($"ОС (OSDescription) : {report.OsDescription}");
@@ -36,6 +37,7 @@ if (args.Contains("--json"))
     Console.WriteLine($"Поточний каталог : {report.CurrentDirectory}");
 
     Console.WriteLine(new string('-', 52));
+    Console.WriteLine();
     Console.WriteLine($"Примітка збірки    : {report.BuildNote}");
     Console.WriteLine($"Предметна область: {report.SubjectArea}");
 
@@ -57,6 +59,7 @@ ImportResult<BookDto> result = extension switch
 };
 
 Console.WriteLine($"Завантажено записів: {result.Items.Count}");
+Console.WriteLine();
 Console.WriteLine(new string('-', 60));
 
 foreach (BookDto b in result.Items.Take(5))
@@ -68,6 +71,7 @@ foreach (BookDto b in result.Items.Take(5))
 if (result.Errors.Count > 0)
 {
     Console.WriteLine(new string('-', 60));
+    Console.WriteLine();
     Console.WriteLine($"Пропущено рядків: {result.Errors.Count}");
     foreach (string e in result.Errors)
     {
@@ -77,6 +81,32 @@ if (result.Errors.Count > 0)
 
 Console.WriteLine(new string('-', 60));
 
+DomainImportResult<BookCopy> domainResult = BookCopy.FromImportResult(result);
+
+Console.WriteLine();
+Console.WriteLine($"Успішно створено доменних об'єктів: {domainResult.Entities.Count}");
+Console.WriteLine($"Всього помилок (файлові + доменні): {domainResult.DomainErrors.Count}");
+
+if (domainResult.Entities.Count > 0)
+{
+    Console.WriteLine("\nПерші доменні сутності:");
+    foreach (var entity in domainResult.Entities.Take(3))
+    {
+        Console.WriteLine($"  {entity}");
+    }
+}
+
+if (domainResult.DomainErrors.Count > 0)
+{
+    Console.WriteLine("\nУсі відхилені рядки (файловий синтаксис + бізнес-інваріанти):");
+    foreach (var error in domainResult.DomainErrors.Take(5))
+    {
+        Console.WriteLine($"  {error}");
+    }
+}
+Console.WriteLine(new string('-', 60));
+
+Console.WriteLine();
 Console.WriteLine("=== Сценарій 1: успіх ===");
 
 BookCopy copy = BookCopy.Create("BC-001", "978-0141439518", "Pride and Prejudice");
@@ -100,26 +130,26 @@ Console.WriteLine($"Успішно відновлено з DTO: {restoredCopy}")
 Console.WriteLine();
 Console.WriteLine("=== Сценарій 2: порушення інваріантів ===");
 
-TryDo("порожній ISBN примірника", () => 
+TryDo("Порожній ISBN примірника", () => 
     BookCopy.Create("BC-002", "   ", "1984"));
 
-TryDo("повторна видача вже виданого примірника", () =>
+TryDo("Повторна видача вже виданого примірника", () =>
 {
     BookCopy testCopy = BookCopy.Create("BC-003", "978-0451524935", "1984");
     testCopy.Issue();
     testCopy.Issue(); 
 });
 
-TryDo("повернення книги, яка знаходиться в бібліотеці", () =>
+TryDo("Повернення книги, яка знаходиться в бібліотеці", () =>
 {
     BookCopy testCopy = BookCopy.Create("BC-004", "978-0061120084", "To Kill a Mockingbird");
     testCopy.Return(); 
 });
 
-TryDo("дата видачі у майбутньому", () => 
+TryDo("Дата видачі у майбутньому", () => 
     Loan.Open("L-102", "BC-001", "READER-01", DateTime.Now.AddDays(10)));
 
-TryDo("дата повернення раніше дати видачі", () =>
+TryDo("Дата повернення раніше дати видачі", () =>
 {
     Loan testLoan = Loan.Open("L-103", "BC-001", "READER-01", DateTime.Now.AddDays(-2));
     testLoan.Close(DateTime.Now.AddDays(-5));
