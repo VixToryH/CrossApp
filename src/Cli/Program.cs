@@ -3,7 +3,10 @@ using System.Text.Json;
 using Core;
 using Core.Dto;
 using Core.Import;
+using System;
+using Core.Domain;
 
+Console.OutputEncoding = System.Text.Encoding.UTF8;
 EnvironmentReport report = EnvironmentInfo.Collect();
 
 if (args.Contains("--json"))
@@ -72,9 +75,67 @@ if (result.Errors.Count > 0)
     }
 }
 
-int total = result.Items.Count + result.Errors.Count;
-double errorPercent = total > 0 ? (double)result.Errors.Count / total * 100 : 0;
 Console.WriteLine(new string('-', 60));
-Console.WriteLine($"Статистика: Усього: {total} | Прийнято: {result.Items.Count} | Пропущено: {result.Errors.Count} | Помилок: {errorPercent:F1}%");
+
+Console.WriteLine("=== Сценарій 1: успіх ===");
+
+BookCopy copy = BookCopy.Create("BC-001", "978-0141439518", "Pride and Prejudice");
+Console.WriteLine($"Створено примірник: {copy}");
+
+Loan loan = Loan.Open("L-101", copy.Id, "READER-42", DateTime.Now.AddDays(-5));
+Console.WriteLine($"Відкрито видачу [{loan.Id}] для читача {loan.ReaderId} (Дата: {loan.IssuedOn:yyyy-MM-dd})");
+
+copy.Issue();
+Console.WriteLine($"Після видачі: {copy}");
+
+copy.Return();
+loan.Close(DateTime.Now);
+Console.WriteLine($"Після повернення: {copy}");
+Console.WriteLine($"Видачу закрито: IsOpen = {loan.IsOpen}, Повернуто: {loan.ReturnedOn:yyyy-MM-dd}");
+
+BookDto dto = copy.ToDto();
+BookCopy restoredCopy = BookCopy.FromDto(dto);
+Console.WriteLine($"Успішно відновлено з DTO: {restoredCopy}");
+
+Console.WriteLine();
+Console.WriteLine("=== Сценарій 2: порушення інваріантів ===");
+
+TryDo("порожній ISBN примірника", () => 
+    BookCopy.Create("BC-002", "   ", "1984"));
+
+TryDo("повторна видача вже виданого примірника", () =>
+{
+    BookCopy testCopy = BookCopy.Create("BC-003", "978-0451524935", "1984");
+    testCopy.Issue();
+    testCopy.Issue(); 
+});
+
+TryDo("повернення книги, яка знаходиться в бібліотеці", () =>
+{
+    BookCopy testCopy = BookCopy.Create("BC-004", "978-0061120084", "To Kill a Mockingbird");
+    testCopy.Return(); 
+});
+
+TryDo("дата видачі у майбутньому", () => 
+    Loan.Open("L-102", "BC-001", "READER-01", DateTime.Now.AddDays(10)));
+
+TryDo("дата повернення раніше дати видачі", () =>
+{
+    Loan testLoan = Loan.Open("L-103", "BC-001", "READER-01", DateTime.Now.AddDays(-2));
+    testLoan.Close(DateTime.Now.AddDays(-5));
+});
+
+static void TryDo(string title, Action action)
+{
+    try
+    {
+        action();
+        Console.WriteLine($" {title}: виняток НЕ спрацював — інваріант відсутній!");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($" {title}: {ex.GetType().Name} — {ex.Message}");
+    }
+}
 
 return 0;

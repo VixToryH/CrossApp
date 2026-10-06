@@ -12,5 +12,12 @@
     "title": "Jane Eyre",
     "year": 1847,
     "author": "Charlotte Bronte"
+  },
+  {
+    "id": "B-102",
+    "isbn": "978-0141439587",
+    "title": "",
+    "year": -12,
+    "author": "Charlotte Bronte"
   }
 ]
