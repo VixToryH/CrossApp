@@ -167,7 +167,17 @@ TryDo("Дата повернення раніше дати видачі", () =>
 
 Console.WriteLine();
 Console.WriteLine(new string('=', 60));
-Console.WriteLine($"Активне сховище: {store.GetType().Name}");
+
+if (store is CachingLibraryStore cachingStore)
+{
+    Console.WriteLine($"Базове сховище: {cachingStore.InnerStoreType.Name}");
+    Console.WriteLine($"Активне сховище (Декоратор): {store.GetType().Name}");
+}
+else
+{
+    Console.WriteLine($"Активне сховище: {store.GetType().Name}");
+}
+
 Console.WriteLine(new string('=', 60));
 
 try

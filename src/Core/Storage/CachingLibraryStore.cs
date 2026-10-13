@@ -10,6 +10,8 @@ public sealed class CachingLibraryStore(ILibraryStore innerStore) : ILibraryStor
     private readonly ILibraryStore _innerStore = innerStore ?? throw new ArgumentNullException(nameof(innerStore));
     private Dictionary<string, BookCopy>? _cache;
 
+    public Type InnerStoreType => _innerStore.GetType();
+
     private Dictionary<string, BookCopy> EnsureCache()
     {
         if (_cache is null)
