@@ -5,8 +5,24 @@ using Core.Dto;
 using Core.Import;
 using System;
 using Core.Domain;
+using Core.Abstractions;
+using Core.Services;
+using Core.Storage;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
+
+//var copy = BookCopy.Create("BC-001", "978-0141439518", "Pride and Prejudice");
+//copy.Id = "NEW_ID";
+
+bool useFile = args.Contains("--file");
+string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
+
+ILibraryStore store = useFile
+    ? new FileLibraryStore(dataPath)
+    : new InMemoryLibraryStore(SampleData.Books());
+
+var lendingService = new LendingService(store);
+
 EnvironmentReport report = EnvironmentInfo.Collect();
 
 if (args.Contains("--json"))
@@ -154,6 +170,37 @@ TryDo("Дата повернення раніше дати видачі", () =>
     Loan testLoan = Loan.Open("L-103", "BC-001", "READER-01", DateTime.Now.AddDays(-2));
     testLoan.Close(DateTime.Now.AddDays(-5));
 });
+
+Console.WriteLine();
+Console.WriteLine(new string('=', 60));
+Console.WriteLine($"Активне сховище: {store.GetType().Name}");
+Console.WriteLine(new string('=', 60));
+
+try
+{
+    var newBook = lendingService.AddBook("B-101", "978-0321356680", "Effective C#");
+    Console.WriteLine($"[УСПІХ] Сервіс додав нову книгу: {newBook.Id} | {newBook.Title}");
+
+    lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Issued);
+    Console.WriteLine($"[УСПІХ] Сервіс змінив статус книги {newBook.Id} на Issued");
+
+    Console.WriteLine("\nУсі книги в потоманному сховищі:");
+    foreach (var b in lendingService.All())
+    {
+        Console.WriteLine($"  {b.Id,-6} | {b.Isbn,-16} | {b.Status,-10} | {b.Title}");
+    }
+
+    Console.WriteLine("\n--- Перевірка помилок у сервісі ---");
+    Console.WriteLine("Спроба додати книгу з дублікатом ID 'B-101'...");
+    lendingService.AddBook("B-101", "978-0000000000", "Duplicate Book");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[ПЕРЕХОПЛЕНО ПОМИЛКУ СЕРВІСУ]: {ex.Message}");
+}
+
+Console.WriteLine(new string('=', 60));
+
 
 static void TryDo(string title, Action action)
 {
