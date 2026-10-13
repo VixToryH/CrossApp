@@ -5,8 +5,14 @@ using Core.Abstractions;
 using Core.Domain;
 using Core.Dto;
 
+
 public sealed class FileLibraryStore(string path) : ILibraryStore
 {
+    public IReadOnlyList<BookCopy> Find(Func<BookCopy, bool> predicate)
+{
+    EnsureLoaded();
+    return _cache.Values.Where(predicate).ToList();
+}
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
     private readonly Dictionary<string, BookCopy> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _path = Path.GetFullPath(path);

@@ -5,6 +5,11 @@ using Core.Domain;
 
 public sealed class LendingService(ILibraryStore store)
 {
+    public IReadOnlyList<BookCopy> Search(Func<BookCopy, bool> predicate)
+{
+    ArgumentNullException.ThrowIfNull(predicate);
+    return _store.Find(predicate);
+}
     private readonly ILibraryStore _store = store ?? throw new ArgumentNullException(nameof(store));
 
     public BookCopy AddBook(string id, string isbn, string title)

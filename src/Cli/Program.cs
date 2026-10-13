@@ -14,13 +14,7 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 //var copy = BookCopy.Create("BC-001", "978-0141439518", "Pride and Prejudice");
 //copy.Id = "NEW_ID";
 
-bool useFile = args.Contains("--file");
-string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
-
-ILibraryStore store = useFile
-    ? new FileLibraryStore(dataPath)
-    : new InMemoryLibraryStore(SampleData.Books());
-
+ILibraryStore store = StoreFactory.Create(args);
 var lendingService = new LendingService(store);
 
 EnvironmentReport report = EnvironmentInfo.Collect();
@@ -213,6 +207,18 @@ static void TryDo(string title, Action action)
     {
         Console.WriteLine($" {title}: {ex.GetType().Name} — {ex.Message}");
     }
+}
+
+Console.WriteLine("\n--- Пошук за допомогою Func<BookCopy, bool> ---");
+
+var availableBooks = lendingService.Search(b => b.Status == BookCopyStatus.Available);
+Console.WriteLine($"Знайдено доступних книг: {availableBooks.Count}");
+
+var csharpBooks = lendingService.Search(b => b.Title.Contains("C#", StringComparison.OrdinalIgnoreCase));
+Console.WriteLine($"Знайдено книг з 'C#' у назві: {csharpBooks.Count}");
+foreach (var book in csharpBooks)
+{
+    Console.WriteLine($"   • {book.Id}: {book.Title}");
 }
 
 return 0;

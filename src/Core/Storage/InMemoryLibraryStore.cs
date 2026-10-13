@@ -3,8 +3,12 @@ namespace Core.Storage;
 using Core.Abstractions;
 using Core.Domain;
 
+
+
 public sealed class InMemoryLibraryStore(IEnumerable<BookCopy>? seed = null) : ILibraryStore
 {
+    public IReadOnlyList<BookCopy> Find(Func<BookCopy, bool> predicate) 
+    => _items.Values.Where(predicate).ToList();
     private readonly Dictionary<string, BookCopy> _items = 
         (seed ?? []).ToDictionary(p => p.Id, StringComparer.OrdinalIgnoreCase);
 
