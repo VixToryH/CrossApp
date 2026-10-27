@@ -8,14 +8,36 @@ using Core.Domain;
 using Core.Abstractions;
 using Core.Services;
 using Core.Storage;
+using Core.Events;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-//var copy = BookCopy.Create("BC-001", "978-0141439518", "Pride and Prejudice");
-//copy.Id = "NEW_ID";
-
 ILibraryStore store = StoreFactory.Create(args);
+
+var sinks = new List<INotificationSink>
+{
+    new ConsoleSink(),
+    new FileSink(Path.Combine(AppContext.BaseDirectory, "logs", "app.log"))
+};
+
 var lendingService = new LendingService(store);
+
+var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
+Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+
+void OnCatalogChanged(object? sender, LibraryChangedEventArgs e)
+{
+    string dueDateStr = e.DueDate.HasValue ? e.DueDate.Value.ToString("yyyy-MM-dd") : "N/A";
+    string line = $"{e.At:HH:mm:ss} {e.Kind,-8} Книга ID: {e.BookId} | Читач: {e.ReaderId} | До дати: {dueDateStr}";
+    
+    Console.WriteLine($"[ПОДІЯ ДOМЕНУ]: {line}");
+    File.AppendAllText(logPath, line + Environment.NewLine);
+}
+
+lendingService.Changed += OnCatalogChanged;
+
+int changes = 0;
+lendingService.Changed += (_, _) => changes++; 
 
 EnvironmentReport report = EnvironmentInfo.Collect();
 
@@ -63,7 +85,7 @@ if (!File.Exists(path))
 string extension = Path.GetExtension(path).ToLowerInvariant();
 ImportResult<BookDto> result = extension switch
 {
-    ".csv" => BookCsvImporter.Load(path),
+    ".csv" => BookCsvImporter.Load(path, err => Console.WriteLine($"[Action Log]: Пропущено рядок -> {err}")),
     ".json" => BookJsonImporter.Load(path),
     _ => new ImportResult<BookDto>([], [$"Непідтримуване розширення файлу '{extension}'"])
 };
@@ -185,22 +207,32 @@ try
     var newBook = lendingService.AddBook("B-101", "978-0321356680", "Effective C#");
     Console.WriteLine($"[УСПІХ] Сервіс додав нову книгу: {newBook.Id} | {newBook.Title}");
 
-    lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Issued);
+    lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Issued, "READER-42");
     Console.WriteLine($"[УСПІХ] Сервіс змінив статус книги {newBook.Id} на Issued");
+
+    Console.WriteLine($"\nОтримано подій обробниками (лічильник changes): {changes}"); // Очікується 2 події
+
+    Console.WriteLine("\n--- ДЕМОНСТРАЦІЯ ВІДПИСКИ (-= OnCatalogChanged) ---");
+    lendingService.Changed -= OnCatalogChanged; 
+
+    lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Available, "READER-42");
+    Console.WriteLine($"Кількість подій після тихої операції (повинна зрости до 3): {changes}");
 
     Console.WriteLine("\nУсі книги в потоманному сховищі:");
     foreach (var b in lendingService.All())
     {
         Console.WriteLine($"  {b.Id,-6} | {b.Isbn,-16} | {b.Status,-10} | {b.Title}");
     }
-
     Console.WriteLine("\n--- Перевірка помилок у сервісі ---");
     Console.WriteLine("Спроба додати книгу з дублікатом ID 'B-101'...");
+    
+    int changesBeforeError = changes;
     lendingService.AddBook("B-101", "978-0000000000", "Duplicate Book");
 }
 catch (Exception ex)
 {
     Console.WriteLine($"[ПЕРЕХОПЛЕНО ПОМИЛКУ СЕРВІСУ]: {ex.Message}");
+    Console.WriteLine($"Підтвердження: Подія НЕ спрацювала, лічильник подій не змінився і дорівнює {changes}");
 }
 
 Console.WriteLine(new string('=', 60));

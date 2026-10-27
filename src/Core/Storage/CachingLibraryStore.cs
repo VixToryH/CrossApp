@@ -26,18 +26,19 @@ public sealed class CachingLibraryStore(ILibraryStore innerStore) : ILibraryStor
         return EnsureCache().Values.ToList();
     }
 
+
     public BookCopy? GetById(string id)
     {
-        return EnsureCache().GetValueOrDefault(id);
+        return EnsureCache().GetValueOrDefault(id); // Читання з RAM-кшу
     }
 
     public void Add(BookCopy item)
     {
         ArgumentNullException.ThrowIfNull(item);
         
-        _innerStore.Add(item);
+        _innerStore.Add(item); // Спочатку зберігаємо у файл на диск
         
-        EnsureCache()[item.Id] = item;
+        EnsureCache()[item.Id] = item; // Потім оновлюємо кеш у пам'яті
     }
 
     public void Update(BookCopy item)

@@ -7,12 +7,19 @@ public static class StoreFactory
     public static ILibraryStore Create(string[] args)
     {
         bool useFile = args.Contains("--file");
+        bool useCache = args.Contains("--cache");
+
         string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
 
-        ILibraryStore baseStore = useFile
+        ILibraryStore store = useFile
             ? new FileLibraryStore(dataPath)
             : new InMemoryLibraryStore(SampleData.Books());
 
-        return new CachingLibraryStore(baseStore);
+        if (useCache)
+        {
+            store = new CachingLibraryStore(store);
+        }
+
+        return store;
     }
 }

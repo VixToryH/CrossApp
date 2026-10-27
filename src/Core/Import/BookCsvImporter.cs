@@ -6,11 +6,18 @@ namespace Core.Import;
 public static class BookCsvImporter
 {
     private const char Separator = ';';
-
-    public static ImportResult<BookDto> Load(string path)
+    public static ImportResult<BookDto> Load(string path, Action<string>? onSkipped = null)
     {
         var items = new List<BookDto>();
         var errors = new List<string>();
+
+        if (!File.Exists(path))
+        {
+            string fileErr = $"Файл не знайдено: {path}";
+            errors.Add(fileErr);
+            onSkipped?.Invoke(fileErr); 
+            return new ImportResult<BookDto>(items, errors);
+        }
 
         string[] lines = File.ReadAllLines(path);
 
@@ -22,7 +29,6 @@ public static class BookCsvImporter
             if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
                 continue;
 
-            // Пропускаємо заголовок (header)
             if (number == 1 && line.StartsWith("id", StringComparison.OrdinalIgnoreCase))
                 continue;
 
@@ -32,7 +38,10 @@ public static class BookCsvImporter
                     items.Add(ok.Value);
                     break;
                 case ParseFailed failed:
-                    errors.Add($"рядок {number}: {failed.Reason}");
+                    string errorMsg = $"рядок {number}: {failed.Reason}";
+                    errors.Add(errorMsg);
+                    
+                    onSkipped?.Invoke(errorMsg);
                     break;
             }
         }
