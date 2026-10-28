@@ -14,12 +14,19 @@ public sealed class LendingService(ILibraryStore store, IEnumerable<INotificatio
     private void OnChanged(string bookId, LibraryChangeKind kind, string readerId = "", DateTimeOffset? dueDate = null)
     {
         var args = new LibraryChangedEventArgs(bookId, kind, readerId, dueDate);
-        
+
         Changed?.Invoke(this, args);
 
         foreach (var sink in _sinks)
         {
-            sink.Notify(args);
+            try
+            {
+                sink.Notify(args);
+            }
+            catch
+            {
+
+            }
         }
     }
 
@@ -28,25 +35,25 @@ public sealed class LendingService(ILibraryStore store, IEnumerable<INotificatio
         var book = BookCopy.Create(id, isbn, title);
         _store.Add(book);
 
-        OnChanged(book.Id, LibraryChangeKind.Added);
+        OnChanged(book.Id, LibraryChangeKind.Added); 
 
         return book;
     }
 
     public void ChangeBookStatus(string id, BookCopyStatus newStatus, string readerId = "")
     {
-        var book = _store.GetById(id) 
+        var book = _store.GetById(id)
             ?? throw new InvalidOperationException($"Немає книги з id={id}.");
 
-        book.ChangeStatus(newStatus);
+        book.ChangeStatus(newStatus); 
         _store.Update(book);
 
-        var kind = newStatus == BookCopyStatus.Issued 
-            ? LibraryChangeKind.Issued 
+        var kind = newStatus == BookCopyStatus.Issued
+            ? LibraryChangeKind.Issued
             : LibraryChangeKind.Returned;
 
-        var dueDate = newStatus == BookCopyStatus.Issued 
-            ? DateTimeOffset.Now.AddDays(14) 
+        var dueDate = newStatus == BookCopyStatus.Issued
+            ? DateTimeOffset.Now.AddDays(14)
             : (DateTimeOffset?)null;
 
         OnChanged(book.Id, kind, readerId, dueDate);

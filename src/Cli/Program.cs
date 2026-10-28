@@ -1,5 +1,6 @@
 ﻿using System.Text.Encodings.Web;
 using System.Text.Json;
+using Cli;
 using Core;
 using Core.Dto;
 using Core.Import;
@@ -14,30 +15,37 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 ILibraryStore store = StoreFactory.Create(args);
 
+var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+Directory.CreateDirectory(logDir);
+var logPath = Path.Combine(logDir, "app.log");     // основне завдання: подія
+var sinkPath = Path.Combine(logDir, "sink.log");   // додаткове завдання: sinks
+
 var sinks = new List<INotificationSink>
 {
     new ConsoleSink(),
-    new FileSink(Path.Combine(AppContext.BaseDirectory, "logs", "app.log"))
+    new FileSink(sinkPath)
 };
-
-var lendingService = new LendingService(store);
-
-var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
-Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+var lendingService = new LendingService(store, sinks);
 
 void OnCatalogChanged(object? sender, LibraryChangedEventArgs e)
 {
-    string dueDateStr = e.DueDate.HasValue ? e.DueDate.Value.ToString("yyyy-MM-dd") : "N/A";
-    string line = $"{e.At:HH:mm:ss} {e.Kind,-8} Книга ID: {e.BookId} | Читач: {e.ReaderId} | До дати: {dueDateStr}";
-    
-    Console.WriteLine($"[ПОДІЯ ДOМЕНУ]: {line}");
+    string dueDateStr = e.DueDate?.ToString("yyyy-MM-dd") ?? "N/A";
+    string text = e.Kind switch
+    {
+        LibraryChangeKind.Issued   => $"видано читачу {e.ReaderId} до {dueDateStr}",
+        LibraryChangeKind.Returned => $"повернено, читач {e.ReaderId}",
+        _                          => "додано в каталог"
+    };
+    string line = $"{e.At:HH:mm:ss} {e.Kind,-8} {e.BookId} {text}";
+
+    Console.WriteLine($"[ПОДІЯ] {line}");
     File.AppendAllText(logPath, line + Environment.NewLine);
 }
 
 lendingService.Changed += OnCatalogChanged;
 
 int changes = 0;
-lendingService.Changed += (_, _) => changes++; 
+lendingService.Changed += (_, _) => changes++;
 
 EnvironmentReport report = EnvironmentInfo.Collect();
 
@@ -53,25 +61,25 @@ if (args.Contains("--json"))
     return 0;
 }
 
-    Console.WriteLine("CrossApp – практикум з крос-платформного програмування");
-    Console.WriteLine("Студент: Гвоздевич Вікторія, група ФЕІ-36");
-    Console.WriteLine();
-    Console.WriteLine(new string('-', 52));
+Console.WriteLine("CrossApp – практикум з крос-платформного програмування");
+Console.WriteLine("Студент: Гвоздевич Вікторія, група ФЕІ-36");
+Console.WriteLine();
+Console.WriteLine(new string('-', 52));
 
-    Console.WriteLine($"ОС (OSDescription) : {report.OsDescription}");
-    Console.WriteLine($"ОС (Environment) : {report.OsVersion}");
-    Console.WriteLine($"Архітектура процесу : {report.ProcessArchitecture}");
-    Console.WriteLine($"Версія .NET (CLR) : {report.DotNetVersion}");
-    Console.WriteLine($"Runtime             : {report.FrameworkDescription}");
-    Console.WriteLine($"RID (визначено)     : {report.DetectedRid}");
-    Console.WriteLine($"RID (від .NET)      : {report.ReportedRid}");
-    Console.WriteLine($"Каталог застосунку : {report.BaseDirectory}");
-    Console.WriteLine($"Поточний каталог : {report.CurrentDirectory}");
+Console.WriteLine($"ОС (OSDescription) : {report.OsDescription}");
+Console.WriteLine($"ОС (Environment) : {report.OsVersion}");
+Console.WriteLine($"Архітектура процесу : {report.ProcessArchitecture}");
+Console.WriteLine($"Версія .NET (CLR) : {report.DotNetVersion}");
+Console.WriteLine($"Runtime             : {report.FrameworkDescription}");
+Console.WriteLine($"RID (визначено)     : {report.DetectedRid}");
+Console.WriteLine($"RID (від .NET)      : {report.ReportedRid}");
+Console.WriteLine($"Каталог застосунку : {report.BaseDirectory}");
+Console.WriteLine($"Поточний каталог : {report.CurrentDirectory}");
 
-    Console.WriteLine(new string('-', 52));
-    Console.WriteLine();
-    Console.WriteLine($"Примітка збірки    : {report.BuildNote}");
-    Console.WriteLine($"Предметна область: {report.SubjectArea}");
+Console.WriteLine(new string('-', 52));
+Console.WriteLine();
+Console.WriteLine($"Примітка збірки    : {report.BuildNote}");
+Console.WriteLine($"Предметна область: {report.SubjectArea}");
 
 string? customPath = args.FirstOrDefault(a => !a.StartsWith("--"));
 string path = !string.IsNullOrEmpty(customPath) ? customPath : Path.Combine("data", "sample.csv");
@@ -162,23 +170,23 @@ Console.WriteLine($"Успішно відновлено з DTO: {restoredCopy}")
 Console.WriteLine();
 Console.WriteLine("=== Сценарій 2: порушення інваріантів ===");
 
-TryDo("Порожній ISBN примірника", () => 
+TryDo("Порожній ISBN примірника", () =>
     BookCopy.Create("BC-002", "   ", "1984"));
 
 TryDo("Повторна видача вже виданого примірника", () =>
 {
     BookCopy testCopy = BookCopy.Create("BC-003", "978-0451524935", "1984");
     testCopy.Issue();
-    testCopy.Issue(); 
+    testCopy.Issue();
 });
 
 TryDo("Повернення книги, яка знаходиться в бібліотеці", () =>
 {
     BookCopy testCopy = BookCopy.Create("BC-004", "978-0061120084", "To Kill a Mockingbird");
-    testCopy.Return(); 
+    testCopy.Return();
 });
 
-TryDo("Дата видачі у майбутньому", () => 
+TryDo("Дата видачі у майбутньому", () =>
     Loan.Open("L-102", "BC-001", "READER-01", DateTime.Now.AddDays(10)));
 
 TryDo("Дата повернення раніше дати видачі", () =>
@@ -202,54 +210,40 @@ else
 
 Console.WriteLine(new string('=', 60));
 
-try
+Console.WriteLine("\n=== Сервіс: події ===");
+
+var newBook = lendingService.AddBook("B-101", "978-0321356680", "Effective C#");
+lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Issued, "READER-42");
+Console.WriteLine($"Подій отримано: {changes}");   // очікується 2
+
+Console.WriteLine("\n=== Сервіс: відмови (підписка ще активна) ===");
+int before = changes;
+
+TryDo("Дублікат id B-101", () =>
+    lendingService.AddBook("B-101", "978-0000000000", "Duplicate Book"));
+
+TryDo("Повторна видача вже виданої книги", () =>
+    lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Issued, "READER-01"));
+
+TryDo("Неіснуючий id", () =>
+    lendingService.ChangeBookStatus("NOPE", BookCopyStatus.Issued, "READER-01"));
+
+Console.WriteLine(changes == before
+    ? $"Винятки були, подій немає: changes = {changes}"
+    : "УВАГА: подія піднялась попри помилку!");
+
+Console.WriteLine("\n=== Сервіс: відписка (-=) ===");
+lendingService.Changed -= OnCatalogChanged;
+lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Available, "READER-42");
+Console.WriteLine($"Подій отримано: {changes}");   
+
+Console.WriteLine("\nУсі книги в сховищі:");
+foreach (var b in lendingService.All())
 {
-    var newBook = lendingService.AddBook("B-101", "978-0321356680", "Effective C#");
-    Console.WriteLine($"[УСПІХ] Сервіс додав нову книгу: {newBook.Id} | {newBook.Title}");
-
-    lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Issued, "READER-42");
-    Console.WriteLine($"[УСПІХ] Сервіс змінив статус книги {newBook.Id} на Issued");
-
-    Console.WriteLine($"\nОтримано подій обробниками (лічильник changes): {changes}"); // Очікується 2 події
-
-    Console.WriteLine("\n--- ДЕМОНСТРАЦІЯ ВІДПИСКИ (-= OnCatalogChanged) ---");
-    lendingService.Changed -= OnCatalogChanged; 
-
-    lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Available, "READER-42");
-    Console.WriteLine($"Кількість подій після тихої операції (повинна зрости до 3): {changes}");
-
-    Console.WriteLine("\nУсі книги в потоманному сховищі:");
-    foreach (var b in lendingService.All())
-    {
-        Console.WriteLine($"  {b.Id,-6} | {b.Isbn,-16} | {b.Status,-10} | {b.Title}");
-    }
-    Console.WriteLine("\n--- Перевірка помилок у сервісі ---");
-    Console.WriteLine("Спроба додати книгу з дублікатом ID 'B-101'...");
-    
-    int changesBeforeError = changes;
-    lendingService.AddBook("B-101", "978-0000000000", "Duplicate Book");
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"[ПЕРЕХОПЛЕНО ПОМИЛКУ СЕРВІСУ]: {ex.Message}");
-    Console.WriteLine($"Підтвердження: Подія НЕ спрацювала, лічильник подій не змінився і дорівнює {changes}");
+    Console.WriteLine($"  {b.Id,-6} | {b.Isbn,-16} | {b.Status,-10} | {b.Title}");
 }
 
 Console.WriteLine(new string('=', 60));
-
-
-static void TryDo(string title, Action action)
-{
-    try
-    {
-        action();
-        Console.WriteLine($" {title}: виняток НЕ спрацював — інваріант відсутній!");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($" {title}: {ex.GetType().Name} — {ex.Message}");
-    }
-}
 
 Console.WriteLine("\n--- Пошук за допомогою Func<BookCopy, bool> ---");
 
@@ -264,3 +258,16 @@ foreach (var book in csharpBooks)
 }
 
 return 0;
+
+static void TryDo(string title, Action action)
+{
+    try
+    {
+        action();
+        Console.WriteLine($" {title}: виняток НЕ спрацював — інваріант відсутній!");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($" {title}: {ex.GetType().Name} — {ex.Message}");
+    }
+}
