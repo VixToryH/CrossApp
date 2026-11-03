@@ -1,15 +1,19 @@
-﻿using System.Text.Encodings.Web;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Cli;
 using Core;
-using Core.Dto;
-using Core.Import;
-using System;
-using Core.Domain;
 using Core.Abstractions;
+using Core.Domain;
+using Core.Dto;
+using Core.Events;
+using Core.Import;
+using Core.Reports;
 using Core.Services;
 using Core.Storage;
-using Core.Events;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
@@ -17,8 +21,8 @@ ILibraryStore store = StoreFactory.Create(args);
 
 var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
 Directory.CreateDirectory(logDir);
-var logPath = Path.Combine(logDir, "app.log");     // основне завдання: подія
-var sinkPath = Path.Combine(logDir, "sink.log");   // додаткове завдання: sinks
+var logPath = Path.Combine(logDir, "app.log");     
+var sinkPath = Path.Combine(logDir, "sink.log");   
 
 var sinks = new List<INotificationSink>
 {
@@ -42,8 +46,7 @@ void OnCatalogChanged(object? sender, LibraryChangedEventArgs e)
     File.AppendAllText(logPath, line + Environment.NewLine);
 }
 
-lendingService.Changed += OnCatalogChanged;
-
+lendingService.Changed += OnCatalogChanged; 
 int changes = 0;
 lendingService.Changed += (_, _) => changes++;
 
@@ -58,7 +61,7 @@ if (args.Contains("--json"))
     };
 
     Console.WriteLine(JsonSerializer.Serialize(report, options));
-    return 0;
+    return;
 }
 
 Console.WriteLine("CrossApp – практикум з крос-платформного програмування");
@@ -81,13 +84,14 @@ Console.WriteLine();
 Console.WriteLine($"Примітка збірки    : {report.BuildNote}");
 Console.WriteLine($"Предметна область: {report.SubjectArea}");
 
-string? customPath = args.FirstOrDefault(a => !a.StartsWith("--"));
+string[] reportCommands = ["report-top", "report-low", "report-groups", "report-sum", "report-loans", "report-benchmark"];
+string? customPath = args.FirstOrDefault(a => !a.StartsWith("--") && !reportCommands.Contains(a));
 string path = !string.IsNullOrEmpty(customPath) ? customPath : Path.Combine("data", "sample.csv");
 
 if (!File.Exists(path))
 {
     Console.WriteLine($"Файл не знайдено: {Path.GetFullPath(path)}");
-    return 1;
+    return;
 }
 
 string extension = Path.GetExtension(path).ToLowerInvariant();
@@ -96,7 +100,7 @@ ImportResult<BookDto> result = extension switch
     ".csv" => BookCsvImporter.Load(path, err => Console.WriteLine($"[Action Log]: Пропущено рядок -> {err}")),
     ".json" => BookJsonImporter.Load(path),
     _ => new ImportResult<BookDto>([], [$"Непідтримуване розширення файлу '{extension}'"])
-};
+}; 
 
 Console.WriteLine($"Завантажено записів: {result.Items.Count}");
 Console.WriteLine();
@@ -150,8 +154,7 @@ Console.WriteLine();
 Console.WriteLine("=== Сценарій 1: успіх ===");
 
 BookCopy copy = BookCopy.Create("BC-001", "978-0141439518", "Pride and Prejudice");
-Console.WriteLine($"Створено примірник: {copy}");
-
+Console.WriteLine($"Створено примірник: {copy}"); 
 Loan loan = Loan.Open("L-101", copy.Id, "READER-42", DateTime.Now.AddDays(-5));
 Console.WriteLine($"Відкрито видачу [{loan.Id}] для читача {loan.ReaderId} (Дата: {loan.IssuedOn:yyyy-MM-dd})");
 
@@ -170,8 +173,7 @@ Console.WriteLine($"Успішно відновлено з DTO: {restoredCopy}")
 Console.WriteLine();
 Console.WriteLine("=== Сценарій 2: порушення інваріантів ===");
 
-TryDo("Порожній ISBN примірника", () =>
-    BookCopy.Create("BC-002", "   ", "1984"));
+TryDo("Порожній ISBN примірника", () => BookCopy.Create("BC-002", "   ", "1984"));
 
 TryDo("Повторна видача вже виданого примірника", () =>
 {
@@ -186,8 +188,7 @@ TryDo("Повернення книги, яка знаходиться в біб�
     testCopy.Return();
 });
 
-TryDo("Дата видачі у майбутньому", () =>
-    Loan.Open("L-102", "BC-001", "READER-01", DateTime.Now.AddDays(10)));
+TryDo("Дата видачі у майбутньому", () => Loan.Open("L-102", "BC-001", "READER-01", DateTime.Now.AddDays(10)));
 
 TryDo("Дата повернення раніше дати видачі", () =>
 {
@@ -196,7 +197,7 @@ TryDo("Дата повернення раніше дати видачі", () =>
 });
 
 Console.WriteLine();
-Console.WriteLine(new string('=', 60));
+Console.WriteLine(new string('=', 60));  
 
 if (store is CachingLibraryStore cachingStore)
 {
@@ -214,19 +215,14 @@ Console.WriteLine("\n=== Сервіс: події ===");
 
 var newBook = lendingService.AddBook("B-101", "978-0321356680", "Effective C#");
 lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Issued, "READER-42");
-Console.WriteLine($"Подій отримано: {changes}");   // очікується 2
+Console.WriteLine($"Подій отримано: {changes}");
 
 Console.WriteLine("\n=== Сервіс: відмови (підписка ще активна) ===");
 int before = changes;
 
-TryDo("Дублікат id B-101", () =>
-    lendingService.AddBook("B-101", "978-0000000000", "Duplicate Book"));
-
-TryDo("Повторна видача вже виданої книги", () =>
-    lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Issued, "READER-01"));
-
-TryDo("Неіснуючий id", () =>
-    lendingService.ChangeBookStatus("NOPE", BookCopyStatus.Issued, "READER-01"));
+TryDo("Дублікат id B-101", () => lendingService.AddBook("B-101", "978-0000000000", "Duplicate Book"));
+TryDo("Повторна видача вже виданої книги", () => lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Issued, "READER-01"));
+TryDo("Неіснуючий id", () => lendingService.ChangeBookStatus("NOPE", BookCopyStatus.Issued, "READER-01"));
 
 Console.WriteLine(changes == before
     ? $"Винятки були, подій немає: changes = {changes}"
@@ -245,8 +241,7 @@ foreach (var b in lendingService.All())
 
 Console.WriteLine(new string('=', 60));
 
-Console.WriteLine("\n--- Пошук за допомогою Func<BookCopy, bool> ---");
-
+Console.WriteLine("\n--- Пошук за допомогою Func<BookCopy, bool> ---"); 
 var availableBooks = lendingService.Search(b => b.Status == BookCopyStatus.Available);
 Console.WriteLine($"Знайдено доступних книг: {availableBooks.Count}");
 
@@ -257,7 +252,93 @@ foreach (var book in csharpBooks)
     Console.WriteLine($"   • {book.Id}: {book.Title}");
 }
 
-return 0;
+Console.WriteLine("\n" + new string('=', 60));
+Console.WriteLine("=== ДЕМО ВІДКЛАДЕНОГО ВИКОНАННЯ (Deferred Execution) ===");
+
+var source = lendingService.All().ToList();
+var query = source.Where(b => b.IsIssued); 
+
+Console.WriteLine($"Виданих книг до змін: {query.Count()}");
+
+source.Add(BookCopy.Create("tmp-999", "978-0000000000", "Тестова книга", isIssued: true));
+
+Console.WriteLine($"Виданих книг після змін: {query.Count()}"); 
+
+var snapshot = query.ToList(); 
+source.Clear();
+
+Console.WriteLine($"У знімку лишилось (після Clear): {snapshot.Count}"); 
+Console.WriteLine(new string('-', 60));
+
+var items = lendingService.All();
+var command = args.FirstOrDefault(a => !a.StartsWith("--") && reportCommands.Contains(a)) ?? "report-top";
+
+Console.WriteLine($"\n=== ВИКОНАННЯ КОМАНДИ ЗВІТУ: {command} ===");
+
+switch (command)
+{
+    case "report-top":
+        Console.WriteLine("=== ТОП-5 НАЗВ ЗА КІЛЬКІСТЮ ПРИМІРНИКІВ ===");
+        Print(ReportService.TopByQuantity(items, 5));
+        break;
+
+    case "report-low":
+        Console.WriteLine("=== КНИГИ З МАЛИМ ЗАЛИШКОМ / ДЕФІЦИТНІ ===");
+        Print(ReportService.LowStock(items, 10));
+        break;
+
+    case "report-groups":
+        Console.WriteLine("=== РОЗПОДІЛ ПРИМІРНИКІВ ЗА СТАТУСАМИ ===");
+        foreach (var g in ReportService.ByCategory(items))
+        {
+            Console.WriteLine($"Статус: {g.Key,-12} Позицій: {g.Count,3} | Всього: {g.TotalQuantity,3}");
+        }
+        break;
+
+    case "report-sum":
+        Console.WriteLine("=== ПІДСУМКОВА СТАТИСТИКА ФОНДУ ===");
+        var t = ReportService.Totals(items);
+        Console.WriteLine($"Унікальних назв: {t.Items}, Всього примірників: {t.Total}, Середнє на назву: {t.Average:F2}, Макс примірників: {t.Max}");
+        break;
+
+    case "report-loans":
+        Console.WriteLine("=== ЗВЕДЕНИЙ ЗВІТ ВИДАНЬ ТА ВИДАЧ (GroupJoin) ===");
+        var sampleLoans = new List<Loan>
+        {
+            Loan.Open("L-101", "BC-001", "READER-42", DateTime.Now.AddDays(-10)),
+            Loan.Open("L-102", "B-101", "READER-01", DateTime.Now.AddDays(-2))
+        };
+        var summaries = ReportService.GetBookLoanSummariesGroupJoin(items, sampleLoans);
+        foreach (var s in summaries)
+        {
+            string status = s.IsCurrentlyIssued ? "Зараз видано" : "В бібліотеці";
+            Console.WriteLine($"[{s.BookId,-6}] {s.Title,-30} | Всього видач: {s.TotalLoansCount,2} | Статус: {status}");
+        }
+        break;
+
+    case "report-benchmark":
+        Console.WriteLine("=== БЕНЧМАРК LINQ (100 000 ЗАПИСІВ) ===");
+        Console.WriteLine("Генерація 100 000 примірників та вимірювання часу виконання...");
+
+        var (timeNoList, timeWithList) = ReportService.BenchmarkListImpact(100_000);
+
+        Console.WriteLine($"1. Чистий LINQ (потоковий, ToList лише наприкінці): {timeNoList} ms");
+        Console.WriteLine($"2. З раннім ToList() у середині ланцюжка          : {timeWithList} ms");
+        Console.WriteLine($"Різниця: проміжний ToList() повільніший у {(double)timeWithList / Math.Max(timeNoList, 1):F2} разів.");
+        break;
+
+    default:
+        Console.WriteLine("Доступні підкоманди: report-top | report-low | report-groups | report-sum | report-loans | report-benchmark");
+        break;
+}
+
+static void Print(IReadOnlyList<StockLine> lines)
+{
+    foreach (var l in lines)
+    {
+        Console.WriteLine($"{l.Sku,-15} {l.Name,-30} {l.Quantity,4} {l.Unit}");
+    }
+}
 
 static void TryDo(string title, Action action)
 {

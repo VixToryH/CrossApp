@@ -206,3 +206,45 @@ Core лише повідомляє, що сталося. Спосіб оброб
 changes = 2           (після відмов події немає)
 Подій отримано: 3     (після -=: операція виконана, app.log не змінився, лічильник +1)
 ```
+
+### Відкладене виконання LINQ (Deferred Execution)
+
+LINQ-запити з операторами `Where` чи `Select` лише формують дерево запиту, а безпосередній обхід джерела відбувається відкладено — під час виклику термінальних методів (`Count()`, `ToList()`). 
+
+У Кроці 3 перший виклик `query.Count()` обходив список `source` і підраховував видані книги на момент виконання. Оскільки запит `query` зберігає посилання на `source`, після додавання елемента через `source.Add(...)` другий виклик `query.Count()` заново виконав обхід оновленої колекції та повернув більше значення. 
+
+Остаточна фіксація результату відбувається за допомогою виклику `.ToList()` (матеріалізація), після чого очищення вихідного списку `source.Clear()` більше не впливає на зафіксований `snapshot.Count`.
+
+### Порівняння LINQ Query Syntax та Method Syntax
+
+У межах додаткового завдання один із звітів (`ByCategory`) було реалізовано у двох синтаксичних формах LINQ:
+
+1. **Method Syntax (Fluent API):**
+   ```csharp
+   public static IReadOnlyList<GroupSummary> ByCategory(IEnumerable<BookCopy> source) =>
+       source.GroupBy(b => b.Status.ToString(), StringComparer.OrdinalIgnoreCase)
+             .Select(g => new GroupSummary(g.Key, g.Count(), g.Count()))
+             .OrderByDescending(s => s.TotalQuantity)
+             .ToList();
+
+
+public static IReadOnlyList<GroupSummary> ByCategoryQuerySyntax(IEnumerable<BookCopy> source) =>
+    (from book in source
+     group book by book.Status.ToString() into statusGroup
+     select new GroupSummary(
+         Key: statusGroup.Key,
+         Count: statusGroup.Count(),
+         TotalQuantity: statusGroup.Count()
+     ) into summary
+     orderby summary.TotalQuantity descending
+     select summary).ToList();
+
+
+### Бенчмарк продуктивності LINQ (`Stopwatch`)
+
+Проведено експериментальне вимірювання швидкодії LINQ-запиту на згенерованій колекції з **100 000 записів** (`BookCopy`).
+
+Запуск вимірювання через CLI:
+
+```powershell
+dotnet run --project src/Cli -- report-benchmark
