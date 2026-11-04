@@ -324,7 +324,21 @@ switch (command)
 
         Console.WriteLine($"1. Чистий LINQ (потоковий, ToList лише наприкінці): {timeNoList} ms");
         Console.WriteLine($"2. З раннім ToList() у середині ланцюжка          : {timeWithList} ms");
-        Console.WriteLine($"Різниця: проміжний ToList() повільніший у {(double)timeWithList / Math.Max(timeNoList, 1):F2} разів.");
+
+        if (timeWithList > timeNoList)
+        {
+            double ratio = (double)timeWithList / Math.Max(timeNoList, 1);
+            Console.WriteLine($"Різниця: проміжний ToList() повільніший у {ratio:F2} разів.");
+        }
+        else if (timeWithList < timeNoList)
+        {
+            double ratio = (double)timeNoList / Math.Max(timeWithList, 1);
+            Console.WriteLine($"Різниця: проміжний ToList() виявився швидшим у {ratio:F2} разів.");
+        }
+        else
+        {
+            Console.WriteLine("Різниця: обидва підходи показали однаковий час.");
+        }
         break;
 
     default:

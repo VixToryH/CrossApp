@@ -110,7 +110,6 @@ public static class ReportService
         var resultA = largeCollection
             .Where(b => b.Title.Contains("Book Title 1"))
             .Select(b => b.Title)
-            .OrderBy(t => t)
             .Take(100)
             .ToList();
         swA.Stop();
@@ -120,7 +119,6 @@ public static class ReportService
             .Where(b => b.Title.Contains("Book Title 1"))
             .ToList()
             .Select(b => b.Title)
-            .OrderBy(t => t)
             .Take(100)
             .ToList();
         swB.Stop();
