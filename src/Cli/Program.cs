@@ -15,6 +15,14 @@ using Core.Reports;
 using Core.Services;
 using Core.Storage;
 
+using var cts = new CancellationTokenSource();
+
+Console.CancelKeyPress += (_, e) =>
+{
+    e.Cancel = true;
+    cts.Cancel();
+};
+
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 ILibraryStore store = StoreFactory.Create(args);
@@ -86,13 +94,56 @@ Console.WriteLine($"Предметна область: {report.SubjectArea}");
 
 string[] reportCommands = ["report-top", "report-low", "report-groups", "report-sum", "report-loans", "report-benchmark"];
 string? customPath = args.FirstOrDefault(a => !a.StartsWith("--") && !reportCommands.Contains(a));
-string path = !string.IsNullOrEmpty(customPath) ? customPath : Path.Combine("data", "sample.csv");
+string path = !string.IsNullOrEmpty(customPath) ? customPath : Path.Combine("data", "catalog.json");
 
 if (!File.Exists(path))
 {
     Console.WriteLine($"Файл не знайдено: {Path.GetFullPath(path)}");
     return;
 }
+
+try
+{
+    var importCommand = args.FirstOrDefault(a => reportCommands.Contains(a));
+
+    if (importCommand is null)
+    {
+        Console.WriteLine($"\n=== АСИНХРОННИЙ ІМПОРТ КАТАЛОГУ З ПРОГРЕСОМ ({path}) ===");
+
+        var progress = new Progress<int>(percent =>
+        {
+            Console.Write($"\rХід імпорту: [{new string('#', percent / 5)}{new string('-', 20 - percent / 5)}] {percent}%");
+        });
+
+        var added = await lendingService.ImportWithTimeoutAsync(
+            new JsonCatalogImporter(), 
+            path, 
+            timeout: TimeSpan.FromSeconds(5), 
+            userToken: cts.Token,
+            progress: progress);
+
+        Console.WriteLine($"\nІмпортовано нових записів: {added}");
+    }
+}
+catch (TimeoutException ex)
+{
+    Console.WriteLine($"\n[ТАЙМАУТ] {ex.Message}");
+}
+catch (OperationCanceledException)
+{
+    Console.WriteLine("\nІмпорт скасовано користувачем (Ctrl+C).");
+}
+catch (DomainException ex)
+{
+    Console.WriteLine($"\nДані відхилено: {ex.Message}");
+}
+catch (FileNotFoundException ex)
+{
+    Console.WriteLine($"\nФайл не знайдено: {ex.FileName}");
+}
+
+Console.WriteLine();
+Console.WriteLine(new string('-', 60));
 
 string extension = Path.GetExtension(path).ToLowerInvariant();
 ImportResult<BookDto> result = extension switch
@@ -102,7 +153,7 @@ ImportResult<BookDto> result = extension switch
     _ => new ImportResult<BookDto>([], [$"Непідтримуване розширення файлу '{extension}'"])
 }; 
 
-Console.WriteLine($"Завантажено записів: {result.Items.Count}");
+Console.WriteLine($"Завантажено записів через старий імпортер: {result.Items.Count}");
 Console.WriteLine();
 Console.WriteLine(new string('-', 60));
 

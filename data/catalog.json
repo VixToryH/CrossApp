@@ -1,0 +1,4 @@
+[
+  { "Id": "BC-101", "Isbn": "978-0131103627", "Title": "Pride and Prejudice", "Status": "Available" },
+  { "Id": "BC-102", "Isbn": "978-0321545641", "Title": "Effective C#", "Status": "Issued" }
+]
