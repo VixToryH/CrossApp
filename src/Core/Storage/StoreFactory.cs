@@ -4,15 +4,13 @@ using Core.Abstractions;
 
 public static class StoreFactory
 {
-    public static ILibraryStore Create(string[] args)
+    public static ILibraryStore Create(string[] args, string resolvedFilePath)
     {
         bool useFile = args.Contains("--file");
         bool useCache = args.Contains("--cache");
 
-        string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
-
         ILibraryStore store = useFile
-            ? new FileLibraryStore(dataPath)
+            ? new FileLibraryStore(resolvedFilePath)
             : new InMemoryLibraryStore(SampleData.Books());
 
         if (useCache)

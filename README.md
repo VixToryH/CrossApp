@@ -226,9 +226,10 @@ LINQ-запити з операторами `Where` чи `Select` лише фо�
              .Select(g => new GroupSummary(g.Key, g.Count(), g.Count()))
              .OrderByDescending(s => s.TotalQuantity)
              .ToList();
-
-
-public static IReadOnlyList<GroupSummary> ByCategoryQuerySyntax(IEnumerable<BookCopy> source) =>
+   ```
+2. **Query Syntax:**
+   ```csharp
+   public static IReadOnlyList<GroupSummary> ByCategoryQuerySyntax(IEnumerable<BookCopy> source) =>
     (from book in source
      group book by book.Status.ToString() into statusGroup
      select new GroupSummary(
@@ -238,6 +239,7 @@ public static IReadOnlyList<GroupSummary> ByCategoryQuerySyntax(IEnumerable<Book
      ) into summary
      orderby summary.TotalQuantity descending
      select summary).ToList();
+   ```
 
 
 ### Бенчмарк продуктивності LINQ (`Stopwatch`)
@@ -248,3 +250,71 @@ public static IReadOnlyList<GroupSummary> ByCategoryQuerySyntax(IEnumerable<Book
 
 ```powershell
 dotnet run --project src/Cli -- report-benchmark
+```
+
+## Конфігурація, шляхи, JSON та Secrets 
+
+Застосунок підтримує кросплатформну роботу зі шляхами (через `Path.Combine` та `AppContext.BaseDirectory`), багаторівневу конфігурацію та безпечне зберігання секретів поза Git-репозиторієм.
+
+### Порядок джерел конфігурації (від найнижчого до найвищого пріоритету)
+1. `appsettings.json` — базові налаштування (за замовчуванням профіль `Production`).
+2. `appsettings.{CROSSAPP_ENVIRONMENT}.json` — налаштування конкретного середовища (за замовчуванням `Development`).
+3. `User Secrets` — локальні секрети розробника (`secrets.json` у профілі користувача ОС).
+4. Змінні середовища з префіксом `CROSSAPP_` (а також спрощена змінна `CROSSAPP_DATA_PATH`).
+5. Аргументи командного рядка (`--Storage:DataPath=...`).
+
+### Профілі середовища
+* **`Development`** (`appsettings.Development.json`): використовується за замовчуванням. Рівень логування `Debug`, файл даних `items.dev.json`, термін видачі книг — `7` днів.
+* **`Production`** (`appsettings.json`): активується при `CROSSAPP_ENVIRONMENT=Production`. Рівень логування `Warning`, файл даних `items.json`, термін видачі книг — `14` днів.
+
+### Таблиця ключів конфігурації
+
+| Ключ у `appsettings.json` | Змінна середовища | Значення за замовчуванням | Опис |
+| :--- | :--- | :--- | :--- |
+| `EnvironmentName` | `CROSSAPP_ENVIRONMENT` | `"Development"` | Назва активного профілю середовища |
+| `Storage:DataPath` | `CROSSAPP_Storage__DataPath` або `CROSSAPP_DATA_PATH` | `"data"` | Каталог збереження JSON-файлу даних |
+| `Storage:FileName` | `CROSSAPP_Storage__FileName` | `"items.json"` (`items.dev.json` у Dev) | Ім'я файлу сховища |
+| `Logging:MinimumLevel` | `CROSSAPP_Logging__MinimumLevel` | `"Warning"` (`"Debug"` у Dev) | Мінімальний рівень логування |
+| `Library:LoanDays` | `CROSSAPP_Library__LoanDays` | `14` (`7` у Dev) | Стандартний термін видачі книги (у днях) |
+| `Integration:ApiKey` | `CROSSAPP_Integration__ApiKey` (або `user-secrets`) | *відсутній* | Секретний ключ інтеграції (не комітиться в Git) |
+
+### Налаштування та запуск
+
+#### 1. Ініціалізація локального секрету (`user-secrets`)
+```bash
+dotnet user-secrets init --project src/Cli
+dotnet user-secrets set "Integration:ApiKey" "local-dev-key" --project src/Cli
+dotnet user-secrets list --project src/Cli
+```
+
+#### 2. Експорт та імпорт колекції в JSON
+```bash
+# Експорт даних у файл сховища (атомарний запис через .tmp + File.Move)
+dotnet run --project src/Cli -- export
+
+# Імпорт та перегляд даних із файлу сховища
+dotnet run --project src/Cli -- import
+```
+
+#### 3. Перевизначення змінних середовища
+
+**PowerShell (Windows):**
+```powershell
+$env:CROSSAPP_ENVIRONMENT = "Production"
+$env:CROSSAPP_DATA_PATH = "C:\Temp\CrossAppData"
+$env:CROSSAPP_Integration__ApiKey = "prod-secret-key-999"
+dotnet run --project src/Cli -- export
+
+# Очищення змінних після перевірки
+Remove-Item Env:CROSSAPP_ENVIRONMENT, Env:CROSSAPP_DATA_PATH, Env:CROSSAPP_Integration__ApiKey
+```
+
+**bash (Linux / macOS):**
+```bash
+CROSSAPP_ENVIRONMENT=Production \
+CROSSAPP_DATA_PATH=/tmp/crossapp_data \
+CROSSAPP_Integration__ApiKey=prod-secret-key-999 \
+dotnet run --project src/Cli -- export
+```
+
+

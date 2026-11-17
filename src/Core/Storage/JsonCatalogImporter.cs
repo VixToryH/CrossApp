@@ -8,7 +8,6 @@ namespace Core.Storage;
 public sealed class JsonCatalogImporter : ICatalogImporter
 {
     private sealed record BookCopyDto(string Id, string Isbn, string Title, string Status);
-
     public async Task<IReadOnlyList<BookCopy>> LoadAsync(
         string path, 
         CancellationToken ct = default, 
@@ -46,7 +45,6 @@ public sealed class JsonCatalogImporter : ICatalogImporter
 
             var percent = (int)((i + 1.0) / dtos.Count * 100);
             progress?.Report(percent);
-            progress?.Report(percent);
         }
 
         return result;
@@ -71,6 +69,7 @@ public sealed class JsonCatalogImporter : ICatalogImporter
 
         await foreach (var dto in dtos.WithCancellation(ct))
         {
+
             index++;
             if (dto is null) continue;
 

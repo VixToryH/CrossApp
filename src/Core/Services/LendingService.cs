@@ -73,6 +73,7 @@ public sealed class LendingService(ILibraryStore store, IEnumerable<INotificatio
         ArgumentNullException.ThrowIfNull(importer);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
+
         var items = await importer.LoadAsync(path, ct, progress);
         var added = 0;
 
@@ -90,7 +91,6 @@ public sealed class LendingService(ILibraryStore store, IEnumerable<INotificatio
         return added;
     }
 
-    // 1. Додаткове завдання: Потоковий імпорт через IAsyncEnumerable
     public async Task<int> ImportStreamAsync(ICatalogImporter importer, string path, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(importer);
@@ -110,7 +110,7 @@ public sealed class LendingService(ILibraryStore store, IEnumerable<INotificatio
         return added;
     }
 
-    // 2. Додаткове завдання: Зв'язані токени та таймаут
+
     public async Task<int> ImportWithTimeoutAsync(
         ICatalogImporter importer, 
         string path, 

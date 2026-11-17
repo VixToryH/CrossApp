@@ -2,11 +2,13 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Cli;
 using Core;
 using Core.Abstractions;
+using Core.Configuration;
 using Core.Domain;
 using Core.Dto;
 using Core.Events;
@@ -14,6 +16,7 @@ using Core.Import;
 using Core.Reports;
 using Core.Services;
 using Core.Storage;
+using Microsoft.Extensions.Configuration;
 
 using var cts = new CancellationTokenSource();
 
@@ -25,12 +28,86 @@ Console.CancelKeyPress += (_, e) =>
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-ILibraryStore store = StoreFactory.Create(args);
+// 1. ЗБИРАННЯ КОНФІГУРАЦІЇ (Лабораторна робота 9)
+var envName = Environment.GetEnvironmentVariable("CROSSAPP_ENVIRONMENT") ?? "Development";
+
+var config = new ConfigurationBuilder()
+    .SetBasePath(AppContext.BaseDirectory)
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+    .AddJsonFile($"appsettings.{envName}.json", optional: true)
+    .AddUserSecrets(Assembly.GetExecutingAssembly(), optional: true)
+    .AddEnvironmentVariables(prefix: "CROSSAPP_")
+    .AddCommandLine(args)
+    .Build();
+
+var appOptions = config.Get<AppOptions>() ?? new AppOptions();
+
+// Підтримка простої змінної CROSSAPP_DATA_PATH
+var legacyDataPath = Environment.GetEnvironmentVariable("CROSSAPP_DATA_PATH");
+var storageOptions = new StorageOptions
+{
+    DataPath = string.IsNullOrWhiteSpace(legacyDataPath) ? appOptions.Storage.DataPath : legacyDataPath,
+    FileName = appOptions.Storage.FileName
+};
+
+string resolvedStoragePath = storageOptions.ResolveFullPath(AppContext.BaseDirectory);
+var apiKey = config["Integration:ApiKey"];
+
+// Якщо передано команду export або import — працюємо з файловим сховищем напряму
+string[] dataCommands = ["export", "import"];
+var dataCmd = args.FirstOrDefault(a => dataCommands.Contains(a, StringComparer.OrdinalIgnoreCase));
+
+if (dataCmd is not null)
+{
+    Console.WriteLine($"Профіль середовища : {appOptions.EnvironmentName} (Лог: {appOptions.Logging.MinimumLevel})");
+    Console.WriteLine($"Файл даних         : {resolvedStoragePath}");
+    Console.WriteLine(string.IsNullOrEmpty(apiKey)
+        ? "ApiKey             : не заданий"
+        : $"ApiKey             : присутній, довжина {apiKey.Length}");
+    Console.WriteLine($"Термін видачі книг : {appOptions.Library.LoanDays} дн.");
+    Console.WriteLine();
+
+    var fileStore = new FileLibraryStore(resolvedStoragePath);
+
+    try
+    {
+        if (dataCmd.Equals("export", StringComparison.OrdinalIgnoreCase))
+        {
+            var sampleBooks = SampleData.Books();
+            foreach (var b in sampleBooks)
+            {
+                if (fileStore.GetById(b.Id) is null)
+                {
+                    fileStore.Add(b);
+                }
+            }
+            Console.WriteLine($"Експортовано {fileStore.List().Count} записів у файл: {resolvedStoragePath}");
+        }
+        else if (dataCmd.Equals("import", StringComparison.OrdinalIgnoreCase))
+        {
+            var loadedBooks = fileStore.List();
+            Console.WriteLine($"Імпортовано {loadedBooks.Count} записів із файлу: {resolvedStoragePath}");
+            foreach (var b in loadedBooks)
+            {
+                Console.WriteLine($"  • [{b.Id}] {b.Title} (ISBN: {b.Isbn}, Статус: {b.Status})");
+            }
+        }
+    }
+    catch (DomainException ex)
+    {
+        Console.WriteLine($"Помилка даних: {ex.Message}");
+    }
+
+    return;
+}
+
+// 2. СТАНДАРТНИЙ ЗАПУСК ІЗ ПЕРЕДАЧЕЮ ШЛЯХУ З КОНФІГУРАЦІЇ
+ILibraryStore store = StoreFactory.Create(args, resolvedStoragePath);
 
 var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
 Directory.CreateDirectory(logDir);
-var logPath = Path.Combine(logDir, "app.log");     
-var sinkPath = Path.Combine(logDir, "sink.log");   
+var logPath = Path.Combine(logDir, "app.log");
+var sinkPath = Path.Combine(logDir, "sink.log");
 
 var sinks = new List<INotificationSink>
 {
@@ -46,7 +123,7 @@ void OnCatalogChanged(object? sender, LibraryChangedEventArgs e)
     {
         LibraryChangeKind.Issued   => $"видано читачу {e.ReaderId} до {dueDateStr}",
         LibraryChangeKind.Returned => $"повернено, читач {e.ReaderId}",
-        _                          => "додано в каталог"
+        _                           => "додано в каталог"
     };
     string line = $"{e.At:HH:mm:ss} {e.Kind,-8} {e.BookId} {text}";
 
@@ -54,7 +131,7 @@ void OnCatalogChanged(object? sender, LibraryChangedEventArgs e)
     File.AppendAllText(logPath, line + Environment.NewLine);
 }
 
-lendingService.Changed += OnCatalogChanged; 
+lendingService.Changed += OnCatalogChanged;
 int changes = 0;
 lendingService.Changed += (_, _) => changes++;
 
@@ -88,13 +165,21 @@ Console.WriteLine($"Каталог застосунку : {report.BaseDirectory}
 Console.WriteLine($"Поточний каталог : {report.CurrentDirectory}");
 
 Console.WriteLine(new string('-', 52));
+Console.WriteLine("=== КОНФІГУРАЦІЯ ТА СЕКРЕТИ (Лабораторна робота 9) ===");
+Console.WriteLine($"Профіль середовища : {appOptions.EnvironmentName} (Лог: {appOptions.Logging.MinimumLevel})");
+Console.WriteLine($"Файл даних         : {resolvedStoragePath}");
+Console.WriteLine($"Термін видачі книг : {appOptions.Library.LoanDays} дн.");
+Console.WriteLine(string.IsNullOrEmpty(apiKey)
+    ? "ApiKey             : не заданий"
+    : $"ApiKey             : присутній, довжина {apiKey.Length}");
+Console.WriteLine(new string('-', 52));
 Console.WriteLine();
 Console.WriteLine($"Примітка збірки    : {report.BuildNote}");
 Console.WriteLine($"Предметна область: {report.SubjectArea}");
 
 string[] reportCommands = ["report-top", "report-low", "report-groups", "report-sum", "report-loans", "report-benchmark"];
-string? customPath = args.FirstOrDefault(a => !a.StartsWith("--") && !reportCommands.Contains(a));
-string path = !string.IsNullOrEmpty(customPath) ? customPath : Path.Combine("data", "catalog.json");
+string? customPath = args.FirstOrDefault(a => !a.StartsWith("--") && !reportCommands.Contains(a) && !dataCommands.Contains(a));
+string path = !string.IsNullOrEmpty(customPath) ? customPath : Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
 
 if (!File.Exists(path))
 {
@@ -116,30 +201,34 @@ try
         });
 
         var added = await lendingService.ImportWithTimeoutAsync(
-            new JsonCatalogImporter(), 
-            path, 
-            timeout: TimeSpan.FromSeconds(5), 
+            new JsonCatalogImporter(),
+            path,
+            timeout: TimeSpan.FromSeconds(5),
             userToken: cts.Token,
             progress: progress);
 
         Console.WriteLine($"\nІмпортовано нових записів: {added}");
     }
 }
-catch (TimeoutException ex)
-{
-    Console.WriteLine($"\n[ТАЙМАУТ] {ex.Message}");
-}
 catch (OperationCanceledException)
 {
     Console.WriteLine("\nІмпорт скасовано користувачем (Ctrl+C).");
+    return;
+}
+catch (TimeoutException ex)
+{
+    Console.WriteLine($"\n[ТАЙМАУТ] {ex.Message}");
+    return;
 }
 catch (DomainException ex)
 {
     Console.WriteLine($"\nДані відхилено: {ex.Message}");
+    return;
 }
 catch (FileNotFoundException ex)
 {
     Console.WriteLine($"\nФайл не знайдено: {ex.FileName}");
+    return;
 }
 
 Console.WriteLine();
@@ -151,7 +240,7 @@ ImportResult<BookDto> result = extension switch
     ".csv" => BookCsvImporter.Load(path, err => Console.WriteLine($"[Action Log]: Пропущено рядок -> {err}")),
     ".json" => BookJsonImporter.Load(path),
     _ => new ImportResult<BookDto>([], [$"Непідтримуване розширення файлу '{extension}'"])
-}; 
+};
 
 Console.WriteLine($"Завантажено записів через старий імпортер: {result.Items.Count}");
 Console.WriteLine();
@@ -205,7 +294,7 @@ Console.WriteLine();
 Console.WriteLine("=== Сценарій 1: успіх ===");
 
 BookCopy copy = BookCopy.Create("BC-001", "978-0141439518", "Pride and Prejudice");
-Console.WriteLine($"Створено примірник: {copy}"); 
+Console.WriteLine($"Створено примірник: {copy}");
 Loan loan = Loan.Open("L-101", copy.Id, "READER-42", DateTime.Now.AddDays(-5));
 Console.WriteLine($"Відкрито видачу [{loan.Id}] для читача {loan.ReaderId} (Дата: {loan.IssuedOn:yyyy-MM-dd})");
 
@@ -248,7 +337,7 @@ TryDo("Дата повернення раніше дати видачі", () =>
 });
 
 Console.WriteLine();
-Console.WriteLine(new string('=', 60));  
+Console.WriteLine(new string('=', 60));
 
 if (store is CachingLibraryStore cachingStore)
 {
@@ -282,7 +371,7 @@ Console.WriteLine(changes == before
 Console.WriteLine("\n=== Сервіс: відписка (-=) ===");
 lendingService.Changed -= OnCatalogChanged;
 lendingService.ChangeBookStatus(newBook.Id, BookCopyStatus.Available, "READER-42");
-Console.WriteLine($"Подій отримано: {changes}");   
+Console.WriteLine($"Подій отримано: {changes}");
 
 Console.WriteLine("\nУсі книги в сховищі:");
 foreach (var b in lendingService.All())
@@ -292,7 +381,7 @@ foreach (var b in lendingService.All())
 
 Console.WriteLine(new string('=', 60));
 
-Console.WriteLine("\n--- Пошук за допомогою Func<BookCopy, bool> ---"); 
+Console.WriteLine("\n--- Пошук за допомогою Func<BookCopy, bool> ---");
 var availableBooks = lendingService.Search(b => b.Status == BookCopyStatus.Available);
 Console.WriteLine($"Знайдено доступних книг: {availableBooks.Count}");
 
@@ -307,18 +396,18 @@ Console.WriteLine("\n" + new string('=', 60));
 Console.WriteLine("=== ДЕМО ВІДКЛАДЕНОГО ВИКОНАННЯ (Deferred Execution) ===");
 
 var source = lendingService.All().ToList();
-var query = source.Where(b => b.IsIssued); 
+var query = source.Where(b => b.IsIssued);
 
 Console.WriteLine($"Виданих книг до змін: {query.Count()}");
 
 source.Add(BookCopy.Create("tmp-999", "978-0000000000", "Тестова книга", isIssued: true));
 
-Console.WriteLine($"Виданих книг після змін: {query.Count()}"); 
+Console.WriteLine($"Виданих книг після змін: {query.Count()}");
 
-var snapshot = query.ToList(); 
+var snapshot = query.ToList();
 source.Clear();
 
-Console.WriteLine($"У знімку лишилось (після Clear): {snapshot.Count}"); 
+Console.WriteLine($"У знімку лишилось (після Clear): {snapshot.Count}");
 Console.WriteLine(new string('-', 60));
 
 var items = lendingService.All();

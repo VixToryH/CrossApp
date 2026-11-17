@@ -5,6 +5,7 @@ using Core.Reports;
 using Core.Services;
 using Core.Storage;
 using System.Text.Json;
+using Core.Configuration;
 
 namespace Core.Tests;
 
@@ -39,6 +40,7 @@ public sealed class InMemoryLibraryStore : ILibraryStore
 public class CatalogServiceTests
 {
     [Fact]
+
     public void ChangeBookStatus_WhenAlreadyIssued_ThrowsDomainException()
     {
         var store = new InMemoryLibraryStore();
@@ -146,6 +148,7 @@ public async Task ImportStreamAsync_ValidJson_ImportsSuccessfully()
 }
 
 [Fact]
+
 public async Task ImportWithTimeoutAsync_WhenTimeoutExpires_ThrowsTimeoutException()
 {
     var tempFile = Path.GetTempFileName();
@@ -160,7 +163,6 @@ public async Task ImportWithTimeoutAsync_WhenTimeoutExpires_ThrowsTimeoutExcepti
 
         using var userCts = new CancellationTokenSource();
         
-        // Використовуємо TimeSpan.Zero, щоб таймаут гарантовано спрацював одразу під час виклику
         var timeout = TimeSpan.Zero;
 
         var exception = await Assert.ThrowsAsync<TimeoutException>(
@@ -204,5 +206,98 @@ public async Task ImportAsync_ReportsProgressCorrectly()
     }
 }
 
+
+[Fact]
+public void StorageOptions_ResolveFullPath_RelativePath_CombinesWithBaseDir()
+{
+    var tempBase = Path.Combine(Path.GetTempPath(), "CrossAppTests_" + Guid.NewGuid().ToString("N"));
+    try
+    {
+        var storage = new StorageOptions { DataPath = "subdata", FileName = "catalog.json" };
+        var fullPath = storage.ResolveFullPath(tempBase);
+
+        var expected = Path.GetFullPath(Path.Combine(tempBase, "subdata", "catalog.json"));
+        Assert.Equal(expected, fullPath);
+        Assert.True(Directory.Exists(Path.Combine(tempBase, "subdata")));
+    }
+    finally
+    {
+        if (Directory.Exists(tempBase))
+            Directory.Delete(tempBase, recursive: true);
+    }
+}
+
+[Fact]
+public void StorageOptions_ResolveFullPath_RootedPath_IgnoresBaseDir()
+{
+    var rootedDir = Path.Combine(Path.GetTempPath(), "CrossAppRooted_" + Guid.NewGuid().ToString("N"));
+    try
+    {
+        var storage = new StorageOptions { DataPath = rootedDir, FileName = "items.json" };
+        var fullPath = storage.ResolveFullPath("C:\\SomeOtherBaseDir");
+
+        var expected = Path.GetFullPath(Path.Combine(rootedDir, "items.json"));
+        Assert.Equal(expected, fullPath);
+    }
+    finally
+    {
+        if (Directory.Exists(rootedDir))
+            Directory.Delete(rootedDir, recursive: true);
+    }
+}
+
+[Fact]
+public void FileLibraryStore_SavesAtomicallyWithReadableCyrillic_AndReloads()
+{
+    var tempDir = Path.Combine(Path.GetTempPath(), "CrossAppStore_" + Guid.NewGuid().ToString("N"));
+    var filePath = Path.Combine(tempDir, "books.json");
+
+    try
+    {
+        var store = new FileLibraryStore(filePath);
+        store.Add(BookCopy.Create("B-01", "978-966-01-0516-4", "Кобзар"));
+
+        Assert.False(File.Exists(filePath + ".tmp"));
+        Assert.True(File.Exists(filePath));
+
+        var rawJson = File.ReadAllText(filePath);
+        Assert.Contains("Кобзар", rawJson);
+        Assert.DoesNotContain("\\u04", rawJson);
+
+        var reloadedStore = new FileLibraryStore(filePath);
+        var loaded = reloadedStore.GetById("B-01");
+        Assert.NotNull(loaded);
+        Assert.Equal("Кобзар", loaded.Title);
+    }
+    finally
+    {
+        if (Directory.Exists(tempDir))
+            Directory.Delete(tempDir, recursive: true);
+    }
+}
+
+[Fact]
+public void FileLibraryStore_CorruptedJson_ThrowsDomainException()
+{
+    var tempDir = Path.Combine(Path.GetTempPath(), "CrossAppBadJson_" + Guid.NewGuid().ToString("N"));
+    var filePath = Path.Combine(tempDir, "broken.json");
+
+    try
+    {
+        Directory.CreateDirectory(tempDir);
+        File.WriteAllText(filePath, "{ invalid json [");
+
+        var store = new FileLibraryStore(filePath);
+        Assert.Throws<DomainException>(() => store.List());
+    }
+    finally
+    {
+        if (Directory.Exists(tempDir))
+            Directory.Delete(tempDir, recursive: true);
+    }
+}
+
     
 }
+
+
